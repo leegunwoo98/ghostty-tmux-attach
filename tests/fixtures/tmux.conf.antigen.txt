@@ -1,0 +1,6 @@
+set -g prefix C-a
+
+# Antigen-tmux user (rare)
+source-file ~/.config/antigen-tmux/init.tmux
+
+set -g mouse on
