@@ -79,10 +79,79 @@ cmd_init() {
     fi
   fi
 
-  # Minimal mode is Phase 7b — stub for now
+  # --update: verify existing sentinel's hash matches the current shipped
+  # snippet. If not, the user has hand-edited inside the sentinel; refuse
+  # unless --force was passed.
+  if [ "$update" -eq 1 ] && [ "$force" -eq 0 ]; then
+    local files=("ghostty:$HOME/.config/ghostty/config" "tmux-main:$HOME/.tmux.conf")
+    local entry snippet_id file found ver hash body body_hash
+    for entry in "${files[@]}"; do
+      snippet_id="${entry%%:*}"
+      file="${entry#*:}"
+      [ -e "$file" ] || continue
+      found=$(gta_patch_version_hash "$file")
+      [ -n "$found" ] || continue
+      ver="${found%% *}"
+      hash="${found##* }"
+      body=$(gta_patch_read "$file")
+      body_hash=$(gta_patch_hash "$body")
+      if [ "$body_hash" != "$hash" ]; then
+        echo "Refusing --update: sentinel in $file appears edited by hand." >&2
+        echo "Either re-run with --force (clobbers) or restore the sentinel block." >&2
+        exit 5
+      fi
+    done
+  fi
+
+  # Minimal mode: single shared 'main' session. No launcher, allocator,
+  # or shell-wrapper. Just continuum-backed tmux + one Ghostty command line.
   if [ "$minimal" -eq 1 ]; then
-    echo "minimal mode not yet implemented (Phase 7b)" >&2
-    exit 99
+    local tmux_path
+    tmux_path=$(command -v tmux 2>/dev/null || true)
+    if [ -z "$tmux_path" ]; then
+      for c in /opt/homebrew/bin/tmux /usr/local/bin/tmux /usr/bin/tmux; do
+        if [ -x "$c" ]; then tmux_path="$c"; break; fi
+      done
+    fi
+    if [ -z "$tmux_path" ]; then
+      echo "Refusing: tmux not found. Install tmux first." >&2
+      exit 6
+    fi
+
+    local ghostty_cfg="$HOME/.config/ghostty/config"
+    local tmux_cfg="$HOME/.tmux.conf"
+
+    local minimal_ghostty_body
+    minimal_ghostty_body=$(printf 'command = %s new-session -A -s main\nwindow-save-state = always' "$tmux_path")
+    local minimal_tmux_body
+    minimal_tmux_body=$(cat "$GTA_SCRIPT_DIR/snippets/tmux.conf.minimal")
+
+    if [ "$dry_run" -eq 1 ]; then
+      echo "--- $ghostty_cfg (current)"
+      echo "+++ $ghostty_cfg (after init --minimal)"
+      printf '%s\n' "$minimal_ghostty_body" | sed 's/^/+ /'
+      echo
+      echo "--- $tmux_cfg (current)"
+      echo "+++ $tmux_cfg (after init --minimal)"
+      printf '%s\n' "$minimal_tmux_body" | sed 's/^/+ /'
+      return 0
+    fi
+
+    local snap_dir
+    snap_dir="$HOME/.local/share/ghostty-tmux-attach/snapshots/$(date -u +%Y%m%dT%H%M%SZ)"
+    mkdir -p "$snap_dir"
+    if [ -e "$ghostty_cfg" ]; then
+      cp "$ghostty_cfg" "$snap_dir/ghostty-config"
+    fi
+    if [ -e "$tmux_cfg" ]; then
+      cp "$tmux_cfg" "$snap_dir/tmux.conf"
+    fi
+
+    gta_patch_write "$ghostty_cfg" "$GTA_VERSION" "$minimal_ghostty_body"
+    gta_patch_write "$tmux_cfg" "$GTA_VERSION" "$minimal_tmux_body"
+
+    echo "Installed (minimal mode). Restart Ghostty to take effect."
+    return 0
   fi
 
   # Resolve install paths.
@@ -197,7 +266,91 @@ cmd_init() {
   echo "Installed. Restart Ghostty to take effect."
   echo "Run 'ghostty-tmux-attach doctor' to verify."
 }
-cmd_uninstall() { echo "uninstall not yet implemented" >&2; exit 99; }
+cmd_uninstall() {
+  local restore_snapshot=0
+  while [ $# -gt 0 ]; do
+    case "$1" in --restore-snapshot) restore_snapshot=1; shift ;; *) shift ;; esac
+  done
+
+  # shellcheck source=/dev/null
+  . "$GTA_SCRIPT_DIR/lib/patches.sh"
+  # shellcheck source=/dev/null
+  . "$GTA_SCRIPT_DIR/lib/os_detect.sh"
+
+  local ghostty_cfg="$HOME/.config/ghostty/config"
+  local tmux_cfg="$HOME/.tmux.conf"
+  local did_restore=0
+
+  if [ "$restore_snapshot" -eq 1 ]; then
+    local snap_root="$HOME/.local/share/ghostty-tmux-attach/snapshots"
+    local latest=""
+    if [ -d "$snap_root" ]; then
+      latest=$(ls -1 "$snap_root" 2>/dev/null | sort | tail -1)
+    fi
+    if [ -z "$latest" ]; then
+      echo "No snapshot found; falling back to surgical removal." >&2
+    else
+      if [ -e "$snap_root/$latest/ghostty-config" ]; then
+        cp "$snap_root/$latest/ghostty-config" "$ghostty_cfg"
+      fi
+      if [ -e "$snap_root/$latest/tmux.conf" ]; then
+        cp "$snap_root/$latest/tmux.conf" "$tmux_cfg"
+      fi
+      echo "Restored from snapshot $latest"
+      did_restore=1
+    fi
+  fi
+
+  if [ "$did_restore" -eq 0 ]; then
+    gta_patch_remove "$ghostty_cfg"
+    gta_patch_remove "$tmux_cfg"
+    # Un-comment "disabled by ghostty-tmux-attach: see sentinel below" annotations.
+    # Pattern is two lines: a marker comment, then "# <original line>".
+    local f tmp
+    for f in "$ghostty_cfg" "$tmux_cfg"; do
+      [ -e "$f" ] || continue
+      tmp=$(mktemp)
+      awk '
+        /^# disabled by ghostty-tmux-attach/ { prev_was_marker=1; next }
+        prev_was_marker { sub(/^# /, ""); prev_was_marker=0 }
+        { print }
+      ' "$f" > "$tmp"
+      mv "$tmp" "$f"
+    done
+  fi
+
+  # Remove installed binaries + shims + lib + snippets (probe all known prefixes)
+  local prefix
+  for prefix in "${GTA_INSTALL_PREFIX:-}" "${GTA_HOMEBREW_PREFIX:-}" "$HOME/.local"; do
+    [ -n "$prefix" ] || continue
+    rm -rf "$prefix/libexec/ghostty-tmux-attach" 2>/dev/null || true
+    rm -rf "$prefix/share/ghostty-tmux-attach" 2>/dev/null || true
+  done
+
+  # Purge continuum resurrect saves containing our marker.
+  local resurrect_dir stash moved f2
+  for resurrect_dir in \
+    "${XDG_DATA_HOME:-$HOME/.local/share}/tmux/resurrect" \
+    "$HOME/.tmux/resurrect"; do
+    [ -d "$resurrect_dir" ] || continue
+    stash="$resurrect_dir/uninstalled-$(date -u +%Y%m%dT%H%M%SZ)"
+    moved=0
+    for f2 in "$resurrect_dir"/*.txt; do
+      [ -e "$f2" ] || continue
+      if grep -q "GHOSTTY_TMUX_ATTACH_ACTIVE" "$f2" 2>/dev/null; then
+        if [ "$moved" -eq 0 ]; then
+          mkdir -p "$stash"
+          moved=1
+        fi
+        mv "$f2" "$stash/"
+      fi
+    done
+  done
+
+  rm -rf "${XDG_CACHE_HOME:-$HOME/.cache}/ghostty-tmux-attach"
+
+  echo "Uninstalled. Restart Ghostty for the change to take effect."
+}
 cmd_doctor() {
   local json=0
   while [ $# -gt 0 ]; do
