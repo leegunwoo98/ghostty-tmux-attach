@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Thin dispatcher: locate install.sh in our package share dir or in the repo
+# we were installed from, and forward all args.
+set -euo pipefail
+
+BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Layouts to probe, in order:
+#  1. Homebrew install: $HOMEBREW_PREFIX/share/ghostty-tmux-attach/install.sh
+#  2. ~/.local install: $HOME/.local/share/ghostty-tmux-attach/install.sh
+#  3. Repo dev:         <repo>/install.sh (when bin/ is a sibling of install.sh)
+for candidate in \
+  "$BIN_DIR/../share/ghostty-tmux-attach/install.sh" \
+  "$BIN_DIR/../install.sh"; do
+  if [ -x "$candidate" ]; then
+    exec "$candidate" "$@"
+  fi
+done
+
+echo "ghostty-tmux-attach: install.sh not found near $BIN_DIR" >&2
+echo "  searched: $BIN_DIR/../share/ghostty-tmux-attach/install.sh" >&2
+echo "  searched: $BIN_DIR/../install.sh" >&2
+exit 1
