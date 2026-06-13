@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+# ghostty-tmux-attach-launch — Ghostty `command =` target.
+# Decides whether to exec tmux or the user's normal shell.
+#
+# Every env var read MUST use `:-` defaults; this enables `set -u`.
+# Requires bash 4+ (printf -v in urlencode). macOS bash 3.2 is rejected
+# by the installer; this script assumes a competent bash.
+
+set -u
+
+# --- Find the library directory (sibling lib/ to our libexec/) ---
+GTA_BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+GTA_LIB_DIR="$(cd "$GTA_BIN_DIR/../lib" 2>/dev/null && pwd)" || GTA_LIB_DIR=""
+
+# --- Resolve user's login shell with fallback chain ---
+GTA_USER_SHELL="${SHELL:-}"
+if [ -z "$GTA_USER_SHELL" ]; then
+  if command -v getent >/dev/null 2>&1; then
+    GTA_USER_SHELL=$(getent passwd "$(id -u)" 2>/dev/null | cut -d: -f7)
+  elif command -v dscl >/dev/null 2>&1; then
+    GTA_USER_SHELL=$(dscl . -read "/Users/$(id -un)" UserShell 2>/dev/null | awk '{print $2}')
+  fi
+  : "${GTA_USER_SHELL:=/bin/sh}"
+fi
+
+# --- Logging ---
+GTA_DEBUG="${GHOSTTY_TMUX_ATTACH_DEBUG:-0}"
+GTA_LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/ghostty-tmux-attach"
+[ "$GTA_DEBUG" = "1" ] && mkdir -p "$GTA_LOG_DIR" 2>/dev/null
+gta_log() {
+  [ "$GTA_DEBUG" = "1" ] || return 0
+  printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$$" "$*" \
+    >> "$GTA_LOG_DIR/launch.log" 2>/dev/null
+}
+
+# --- Guards ---
+# Test hook: tests can't easily allocate a PTY under bats, so they set
+# GHOSTTY_TMUX_ATTACH_TEST_SKIP_TTY_GUARD=1 to skip ONLY this guard. Production
+# never sets this; the installer enforces nothing about it (it's a test-only knob).
+if [ "${GHOSTTY_TMUX_ATTACH_TEST_SKIP_TTY_GUARD:-0}" != "1" ]; then
+  if ! { [ -t 0 ] && [ -t 1 ]; }; then
+    gta_log "guard: no TTY; exec user shell"
+    exec "$GTA_USER_SHELL" -l
+  fi
+fi
+if [ -n "${TMUX:-}" ]; then
+  gta_log "guard: already in tmux; exec user shell"
+  exec "$GTA_USER_SHELL" -l
+fi
+if [ -z "${GHOSTTY_RESOURCES_DIR:-}" ]; then
+  gta_log "guard: GHOSTTY_RESOURCES_DIR unset (not a Ghostty surface); exec user shell"
+  exec "$GTA_USER_SHELL" -l
+fi
+if [ -n "${SSH_CONNECTION:-}" ] || [ -n "${SSH_CLIENT:-}" ] || [ -n "${SSH_TTY:-}" ]; then
+  gta_log "guard: SSH session; exec user shell"
+  exec "$GTA_USER_SHELL" -l
+fi
+if [ "${GHOSTTY_TMUX_ATTACH_SKIP_HOME:-1}" = "1" ] && [ "$PWD" = "$HOME" ]; then
+  gta_log "guard: PWD == HOME and SKIP_HOME=1; exec user shell"
+  exec "$GTA_USER_SHELL" -l
+fi
+
+# --- tmux on PATH? probe common brew locations as a fallback ---
+if ! command -v tmux >/dev/null 2>&1; then
+  for c in /opt/homebrew/bin/tmux /usr/local/bin/tmux /home/linuxbrew/.linuxbrew/bin/tmux; do
+    if [ -x "$c" ]; then
+      PATH="${c%/tmux}:$PATH"
+      export PATH
+      break
+    fi
+  done
+fi
+if ! command -v tmux >/dev/null 2>&1; then
+  gta_log "guard: tmux not found on PATH; exec user shell"
+  exec "$GTA_USER_SHELL" -l
+fi
+
+# --- URL-encode helper (bash 4+; macOS bash 3.2 not supported in v0.1) ---
+gta_urlencode() {
+  LC_ALL=C
+  local s="$1" out="" i c
+  for ((i=0; i<${#s}; i++)); do
+    c=${s:i:1}
+    case "$c" in
+      [A-Za-z0-9._~/-]) out+="$c" ;;
+      *) printf -v c '%%%02X' "'$c" ; out+="$c" ;;
+    esac
+  done
+  printf '%s' "$out"
+}
+
+# --- OSC 7: tell Ghostty our cwd ---
+GTA_HOST="${HOST:-${HOSTNAME:-$(hostname 2>/dev/null)}}"
+GTA_PWD_ENC=$(gta_urlencode "$PWD")
+printf '\033]7;kitty-shell-cwd://%s%s\a' "$GTA_HOST" "$GTA_PWD_ENC"
+gta_log "OSC 7 emitted: host=$GTA_HOST pwd=$PWD"
+
+# --- Allocate session name ---
+if [ -z "$GTA_LIB_DIR" ] || [ ! -r "$GTA_LIB_DIR/allocator.sh" ]; then
+  gta_log "ERROR: lib/allocator.sh not found at $GTA_LIB_DIR; exec user shell"
+  exec "$GTA_USER_SHELL" -l
+fi
+# shellcheck source=/dev/null
+. "$GTA_LIB_DIR/allocator.sh"
+if ! gta_choose_session; then
+  gta_log "allocator failed; exec user shell"
+  exec "$GTA_USER_SHELL" -l
+fi
+gta_log "allocator chose: $GTA_CHOSEN"
+
+# --- Pre-flight TTY re-check ---
+if [ "${GHOSTTY_TMUX_ATTACH_TEST_SKIP_TTY_GUARD:-0}" != "1" ]; then
+  if ! { [ -t 0 ] && [ -t 1 ]; }; then
+    gta_log "TTY vanished post-allocator; exec user shell"
+    exec "$GTA_USER_SHELL" -l
+  fi
+fi
+
+# --- Marker env for the shell-wrapper ---
+export GHOSTTY_TMUX_ATTACH_ACTIVE=1
+export GHOSTTY_USER_SHELL="$GTA_USER_SHELL"
+
+# --- Close any leaked fds before exec (defense in depth) ---
+exec 9>&- 2>/dev/null || true
+
+# --- exec tmux, with shell-fallback if exec itself fails ---
+gta_log "exec tmux new-session -A -s $GTA_CHOSEN"
+exec tmux new-session -A -s "$GTA_CHOSEN"
+gta_log "ERROR: exec tmux returned; falling back to shell"
+exec "$GTA_USER_SHELL" -l
