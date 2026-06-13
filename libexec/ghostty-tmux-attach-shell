@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# ghostty-tmux-attach-shell — tmux `default-command` target.
+# Wires up Ghostty shell-integration via per-shell shims.
+
+set -u
+
+GTAS_BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+GTAS_REPO_DIR="$(cd "$GTAS_BIN_DIR/.." && pwd)"
+
+# Resolve the user's real shell (GHOSTTY_USER_SHELL set by launcher; fallback
+# to $SHELL for users who bypass the launcher, e.g., `tmux new` outside Ghostty).
+GTAS_SHELL="${GHOSTTY_USER_SHELL:-${SHELL:-/bin/sh}}"
+GTAS_NAME=$(basename "$GTAS_SHELL")
+GTAS_SHIMS="$GTAS_REPO_DIR/shim"
+
+# If not orchestrated by our launcher, pass-through.
+if [ "${GHOSTTY_TMUX_ATTACH_ACTIVE:-0}" != "1" ] || [ -z "${GHOSTTY_RESOURCES_DIR:-}" ]; then
+  exec "$GTAS_SHELL"
+fi
+
+case "$GTAS_NAME" in
+  zsh)
+    SHIM="$GTAS_SHIMS/zsh"
+    if [ -r "$SHIM/.zshrc" ]; then
+      export GHOSTTY_USER_ZDOTDIR="${ZDOTDIR:-$HOME}"
+      export ZDOTDIR="$SHIM"
+    fi
+    exec "$GTAS_SHELL"
+    ;;
+  bash)
+    SHIM="$GTAS_SHIMS/bash/bashrc"
+    if [ -r "$SHIM" ]; then
+      exec "$GTAS_SHELL" --rcfile "$SHIM"
+    fi
+    exec "$GTAS_SHELL"
+    ;;
+  *)
+    # fish, nushell, etc.: pass-through (manual snippet in docs)
+    exec "$GTAS_SHELL"
+    ;;
+esac
