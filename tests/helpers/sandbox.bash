@@ -11,6 +11,8 @@ sandbox_setup() {
   export XDG_CACHE_HOME="$SANDBOX_CACHE"
   export XDG_STATE_HOME="$SANDBOX_STATE"
   export XDG_DATA_HOME="$SANDBOX_DATA"
+  # Force install prefix into the sandbox HOME so tests don't pollute /opt/homebrew.
+  export GTA_INSTALL_PREFIX="$SANDBOX_HOME/.local"
 }
 
 sandbox_teardown() {
@@ -23,6 +25,7 @@ sandbox_teardown() {
   fi
   unset SANDBOX_HOME SANDBOX_CACHE SANDBOX_STATE SANDBOX_DATA
   unset XDG_CACHE_HOME XDG_STATE_HOME XDG_DATA_HOME
+  unset GTA_INSTALL_PREFIX
 }
 
 sandbox_seed_ghostty_config() {
