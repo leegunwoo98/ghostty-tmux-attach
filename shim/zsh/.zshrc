@@ -10,6 +10,16 @@ if [[ -n "${GHOSTTY_RESOURCES_DIR:-}" ]]; then
   unset _gta_int
 fi
 
+# Inside tmux, override Ghostty's OSC 7 emitter to wrap in tmux DCS
+# passthrough so the cwd reaches the outer Ghostty terminal. Without this,
+# new Ghostty panes/tabs inherit the OUTER shell's launch-time cwd (stale
+# once the user cd's inside tmux), and they open at the wrong directory.
+if [[ -n "${TMUX:-}" ]]; then
+  _ghostty_report_pwd() {
+    builtin print -n -- $'\ePtmux;\e\e]7;kitty-shell-cwd://'"${HOST}${PWD}"$'\a\e\\'
+  }
+fi
+
 # Restore the user's original ZDOTDIR and chain to their .zshrc
 if [[ -n "${GHOSTTY_USER_ZDOTDIR:-}" ]]; then
   ZDOTDIR="$GHOSTTY_USER_ZDOTDIR"

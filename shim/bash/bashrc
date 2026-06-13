@@ -10,6 +10,21 @@ if [ -n "${GHOSTTY_RESOURCES_DIR:-}" ]; then
   unset _gta_int
 fi
 
+# Inside tmux, ensure OSC 7 emission is wrapped in tmux DCS passthrough so
+# cwd updates from this inner-tmux shell reach the outer Ghostty terminal.
+# Without this, new Ghostty panes/tabs inherit the OUTER shell's launch-time
+# cwd, opening at the wrong directory after the user cd's inside tmux.
+if [ -n "${TMUX:-}" ]; then
+  _gta_emit_osc7_in_tmux() {
+    local _gta_h="${HOST:-${HOSTNAME:-$(hostname 2>/dev/null)}}"
+    printf '\ePtmux;\e\e]7;kitty-shell-cwd://%s%s\a\e\\' "$_gta_h" "$PWD"
+  }
+  # Prepend to PROMPT_COMMAND so it fires every prompt
+  PROMPT_COMMAND="_gta_emit_osc7_in_tmux${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
+  # Emit once now so the cwd is correct for the very first prompt
+  _gta_emit_osc7_in_tmux
+fi
+
 if [ -r "$HOME/.bashrc" ]; then
   # shellcheck source=/dev/null
   . "$HOME/.bashrc"
