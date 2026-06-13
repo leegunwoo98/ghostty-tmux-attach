@@ -1,0 +1,16 @@
+# ghostty-tmux-attach: bash --rcfile shim
+# Sources Ghostty's shell-integration, then chains to the user's actual .bashrc.
+
+if [ -n "${GHOSTTY_RESOURCES_DIR:-}" ]; then
+  _gta_int="$GHOSTTY_RESOURCES_DIR/shell-integration/bash/ghostty-integration"
+  if [ -r "$_gta_int" ]; then
+    # shellcheck source=/dev/null
+    . "$_gta_int"
+  fi
+  unset _gta_int
+fi
+
+if [ -r "$HOME/.bashrc" ]; then
+  # shellcheck source=/dev/null
+  . "$HOME/.bashrc"
+fi
