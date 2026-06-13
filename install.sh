@@ -45,6 +45,74 @@ main() {
 
 cmd_init() { echo "init not yet implemented" >&2; exit 99; }
 cmd_uninstall() { echo "uninstall not yet implemented" >&2; exit 99; }
-cmd_doctor() { echo "doctor not yet implemented" >&2; exit 99; }
+cmd_doctor() {
+  local json=0
+  while [ $# -gt 0 ]; do
+    case "$1" in --json) json=1; shift ;; *) shift ;; esac
+  done
+
+  # shellcheck source=/dev/null
+  . "$GTA_SCRIPT_DIR/lib/os_detect.sh"
+
+  local tmux_path tmux_ver=""
+  tmux_path=$(command -v tmux 2>/dev/null || true)
+  if [ -n "$tmux_path" ]; then
+    tmux_ver=$("$tmux_path" -V 2>/dev/null | awk '{print $2}')
+  fi
+
+  local ghostty_present=0
+  [ -n "$GTA_GHOSTTY_RESOURCES" ] && ghostty_present=1
+
+  local bash_major="${BASH_VERSION%%.*}"
+
+  if [ "$json" -eq 1 ]; then
+    cat <<JSON
+{
+  "version": "$GTA_VERSION",
+  "os": "$GTA_OS",
+  "arch": "$GTA_ARCH",
+  "is_wsl": $GTA_IS_WSL,
+  "is_docker": $GTA_IS_DOCKER,
+  "is_rosetta": $GTA_IS_ROSETTA,
+  "distro": "${GTA_DISTRO:-}",
+  "homebrew_prefix": "${GTA_HOMEBREW_PREFIX:-}",
+  "tmux_path": "${tmux_path:-}",
+  "tmux_version": "${tmux_ver:-}",
+  "ghostty_resources": "${GTA_GHOSTTY_RESOURCES:-}",
+  "bash_major": "$bash_major"
+}
+JSON
+    return 0
+  fi
+
+  echo "ghostty-tmux-attach $GTA_VERSION — doctor"
+  echo
+  if [ "$GTA_IS_ROSETTA" = "1" ]; then
+    echo "OS:          $GTA_OS / $GTA_ARCH (Rosetta)"
+  else
+    echo "OS:          $GTA_OS / $GTA_ARCH"
+  fi
+  if [ -n "$GTA_DISTRO" ]; then
+    echo "Distro:      $GTA_DISTRO"
+  fi
+  echo "Homebrew:    ${GTA_HOMEBREW_PREFIX:-<not found>}"
+  if [ -n "$tmux_path" ]; then
+    echo "tmux:        $tmux_path ($tmux_ver)"
+  else
+    echo "tmux:        NOT FOUND — install via brew/apt/pacman/dnf"
+  fi
+  if [ "$ghostty_present" -eq 1 ]; then
+    echo "Ghostty:     $GTA_GHOSTTY_RESOURCES"
+  else
+    echo "Ghostty:     NOT FOUND — install from https://ghostty.org"
+  fi
+  echo "bash:        major version $bash_major (need 4+)"
+  if [ "$GTA_IS_WSL" = "1" ]; then
+    echo "WSL:         detected — install refuses"
+  fi
+  if [ "$GTA_IS_DOCKER" = "1" ]; then
+    echo "Docker:      detected — install refuses"
+  fi
+}
 
 main "$@"
