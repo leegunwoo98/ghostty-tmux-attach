@@ -10,6 +10,10 @@
 # stale-tuple race that an earlier mkdir-lock design suffered from.
 
 # Internal helper: emit "PID:start_epoch" for current shell.
+# LC_ALL=C pins month/day abbreviations to English so `date -j -f` round-trips
+# the BSD `ps -o lstart=` output (otherwise LC_TIME=de_DE yields "Sa"/"Mai",
+# the parse fails, and the tuple is born "PID:0" — fine in isolation but
+# breaks tuple equality against verifier output that also depends on locale).
 gta_self_owner() {
   local start=""
   if [ "$(uname -s)" = "Linux" ] && [ -r "/proc/$$/stat" ]; then
@@ -17,7 +21,7 @@ gta_self_owner() {
     start=$(awk '{print $22}' "/proc/$$/stat" 2>/dev/null)
   elif command -v ps >/dev/null 2>&1; then
     # macOS: lstart is a date string; epoch via date -j -f
-    start=$(ps -o lstart= -p $$ 2>/dev/null | xargs -I{} date -j -f "%a %b %d %T %Y" "{}" +%s 2>/dev/null)
+    start=$(LC_ALL=C ps -o lstart= -p $$ 2>/dev/null | LC_ALL=C xargs -I{} date -j -f "%a %b %d %T %Y" "{}" +%s 2>/dev/null)
   fi
   : "${start:=0}"
   printf '%s:%s' "$$" "$start"
@@ -25,6 +29,15 @@ gta_self_owner() {
 
 # Check whether a claim owner tuple is alive. Tuple = "PID:start".
 # Returns 0 if alive (matching tuple), 1 if dead or impostor.
+#
+# Fail-closed policy: if `kill -0 "$pid"` succeeds (PID is live) but the
+# start-time probe returns empty — transient ps/xargs/date glitch, locale
+# mismatch, signal interruption — we return 0 ("alive"). The start-time
+# check is only a PID-reuse impostor defense; when we can't verify, treat
+# the owner as alive so we DON'T `rm -f` a peer's just-written claim. Worst
+# case: a stale-but-unverifiable claim stays sticky until its real holder
+# or the next acquirer cleans it up. That preserves the no-collision
+# invariant at the cost of slightly slower stale-GC under adversity.
 gta_owner_alive() {
   local tuple="$1" pid start cur
   pid="${tuple%%:*}"
@@ -35,9 +48,11 @@ gta_owner_alive() {
   if [ "$(uname -s)" = "Linux" ] && [ -r "/proc/$pid/stat" ]; then
     cur=$(awk '{print $22}' "/proc/$pid/stat" 2>/dev/null)
   else
-    cur=$(ps -o lstart= -p "$pid" 2>/dev/null | xargs -I{} date -j -f "%a %b %d %T %Y" "{}" +%s 2>/dev/null)
+    cur=$(LC_ALL=C ps -o lstart= -p "$pid" 2>/dev/null | LC_ALL=C xargs -I{} date -j -f "%a %b %d %T %Y" "{}" +%s 2>/dev/null)
   fi
-  [ "${cur:-x}" = "$start" ]
+  # Empty cur → probe failed; default to alive (fail closed).
+  [ -z "$cur" ] && return 0
+  [ "$cur" = "$start" ]
 }
 
 # Try to atomically acquire a single candidate name. Returns 0 on success
