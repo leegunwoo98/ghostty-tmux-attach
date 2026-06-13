@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / tmux ${{ matrix.tmux }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, ubuntu-24.04]
+        tmux: ["3.4"]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install deps (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install tmux bash shellcheck
+          echo "/opt/homebrew/bin" >> $GITHUB_PATH
+
+      - name: Install deps (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tmux bash zsh shellcheck
+
+      - name: Verify bash version (must be 4+)
+        run: bash -c '[ "${BASH_VERSION%%.*}" -ge 4 ] || { echo "bash too old: $BASH_VERSION"; exit 1; }'
+
+      - name: Lint (shellcheck)
+        run: make lint
+
+      - name: Run bats test suite
+        run: make test
+
+  smoke-install:
+    name: Smoke install (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, ubuntu-24.04]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install tmux + bash 4+
+        run: |
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            brew install tmux bash
+            echo "/opt/homebrew/bin" >> $GITHUB_PATH
+          else
+            sudo apt-get install -y tmux bash
+          fi
+
+      - name: Dry-run install
+        run: ./install.sh init --dry-run
