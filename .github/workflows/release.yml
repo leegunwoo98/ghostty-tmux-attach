@@ -1,0 +1,29 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute tarball sha256
+        id: sha
+        run: |
+          curl -fsSL \
+            "https://github.com/${{ github.repository }}/archive/refs/tags/${{ github.ref_name }}.tar.gz" \
+            > release.tar.gz
+          echo "sha256=$(sha256sum release.tar.gz | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Bump formula in homebrew-tap
+        uses: dawidd6/action-homebrew-bump-formula@v3
+        with:
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          tap: gunwoo/homebrew-tap
+          formula: ghostty-tmux-attach
+          tag: ${{ github.ref_name }}
+          force: false
