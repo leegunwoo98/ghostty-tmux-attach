@@ -240,7 +240,27 @@ cmd_init() {
   cp "$GTA_SCRIPT_DIR/shim/zsh/.zshrc" "$shim_dir/zsh/.zshrc"
   cp "$GTA_SCRIPT_DIR/shim/bash/bashrc" "$shim_dir/bash/bashrc"
   cp -R "$GTA_SCRIPT_DIR/snippets/." "$snippets_dir/"
-  chmod +x "$launch_path" "$wrapper_path"
+  # Install user-facing CLI dispatcher AND its install.sh source so the
+  # dispatcher can find it via the standard probe paths in $share_dir.
+  cp "$GTA_SCRIPT_DIR/bin/ghostty-tmux-attach" "$bin_dir/ghostty-tmux-attach"
+  cp "$GTA_SCRIPT_DIR/install.sh" "$share_dir/install.sh"
+  chmod +x "$launch_path" "$wrapper_path" "$bin_dir/ghostty-tmux-attach" "$share_dir/install.sh"
+
+  # Rewrite launcher + shell-wrapper shebangs to the absolute path of the
+  # bash that ran install.sh (which is guaranteed bash 4+ — the version
+  # check above refused if not). Without this, Ghostty's `command =` exec
+  # runs the launcher under launchd's PATH (/usr/bin:/bin), which finds
+  # system bash 3.2 on macOS — and the launcher's urlencode uses bash 4+
+  # `printf -v`, so it crashes.
+  local _bash_abs
+  _bash_abs=$(command -v bash)
+  if [ -n "$_bash_abs" ] && [ -x "$_bash_abs" ]; then
+    local _f
+    for _f in "$launch_path" "$wrapper_path"; do
+      sed -i.gta-bak "1s|^#!.*bash.*|#!$_bash_abs|" "$_f"
+      rm -f "$_f.gta-bak"
+    done
+  fi
 
   # Comment out user's existing shell-integration-features line (outside sentinel)
   if [ -n "$existing_features" ] && [ -e "$ghostty_cfg" ]; then
