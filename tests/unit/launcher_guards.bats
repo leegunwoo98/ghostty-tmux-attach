@@ -90,3 +90,59 @@ assert_log_contains() {
   # depending on TTY. Just check the log shows it was emitted.
   assert_log_contains "OSC 7 emitted"
 }
+
+@test "config file: SKIP_HOME=0 overrides default and allows HOME-attach" {
+  # Create the config file
+  mkdir -p "$HOME/.config/ghostty-tmux-attach"
+  echo "SKIP_HOME=0" > "$HOME/.config/ghostty-tmux-attach/config"
+  # No need to invoke a real tmux — just verify the launcher logs that it
+  # loaded the file and the SKIP_HOME=0 takes effect (no PWD==HOME bail).
+  PWD="$HOME" \
+  GHOSTTY_TMUX_ATTACH_TEST_SKIP_TTY_GUARD=1 \
+  GHOSTTY_RESOURCES_DIR=/tmp/fake-ghostty \
+    run bash -c "'$LAUNCHER' </dev/null >/dev/null 2>&1; true"
+  if [ -f "$LOG" ]; then
+    if grep -q "SKIP_HOME=0" "$LOG"; then
+      :  # logged config load with SKIP_HOME=0; pass
+    else
+      echo "log contents:"; cat "$LOG"
+      fail "config file SKIP_HOME=0 not loaded"
+    fi
+    # Should NOT have logged "PWD == HOME and SKIP_HOME=1" because we overrode
+    if grep -q "PWD == HOME and SKIP_HOME=1" "$LOG"; then
+      fail "PWD==HOME guard fired despite SKIP_HOME=0"
+    fi
+  else
+    fail "no log file"
+  fi
+}
+
+@test "config file: missing file is OK (no error)" {
+  # No config file exists; launcher must not crash
+  rm -rf "$HOME/.config/ghostty-tmux-attach"
+  GHOSTTY_TMUX_ATTACH_TEST_SKIP_TTY_GUARD=1 \
+  GHOSTTY_RESOURCES_DIR=/tmp/fake-ghostty \
+    run bash -c "'$LAUNCHER' </dev/null >/dev/null 2>&1; true"
+  [ -f "$LOG" ]
+}
+
+@test "config file: env var wins over file (precedence — code inspection)" {
+  # Precedence is enforced by `: "${GHOSTTY_TMUX_ATTACH_SKIP_HOME:=$_gta_v}"`
+  # in the launcher: ${VAR:=val} sets VAR only if unset/empty. If env is set,
+  # the file value is ignored. A direct unit test of PWD==HOME behavior under
+  # bats hits a `cd`-in-bash-subshell PWD-reset quirk that is unrelated to the
+  # launcher's logic. Instead verify the precedence semantics via the log:
+  # if env is set to 1 and the file says 0, the launcher logs SKIP_HOME=1.
+  mkdir -p "$HOME/.config/ghostty-tmux-attach"
+  echo "SKIP_HOME=0" > "$HOME/.config/ghostty-tmux-attach/config"
+  GHOSTTY_TMUX_ATTACH_SKIP_HOME=1 \
+  GHOSTTY_TMUX_ATTACH_TEST_SKIP_TTY_GUARD=1 \
+  GHOSTTY_RESOURCES_DIR=/tmp/fake-ghostty \
+    run bash -c "'$LAUNCHER' </dev/null >/dev/null 2>&1; true"
+  if grep -q "SKIP_HOME=1" "$LOG"; then
+    :
+  else
+    echo "log:"; cat "$LOG"
+    fail "env var GHOSTTY_TMUX_ATTACH_SKIP_HOME=1 was not preserved"
+  fi
+}

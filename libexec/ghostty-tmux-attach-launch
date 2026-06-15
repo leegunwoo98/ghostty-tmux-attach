@@ -33,6 +33,29 @@ gta_log() {
     >> "$GTA_LOG_DIR/launch.log" 2>/dev/null
 }
 
+# --- Optional user config file (V3 fallback) ---
+# Ghostty's `env = KEY=VALUE` directive doesn't reliably propagate to restored
+# surfaces (window-save-state replays the original launch config). Instead the
+# launcher reads ~/.config/ghostty-tmux-attach/config for runtime settings.
+# Format: KEY=VALUE per line; lines starting with # are comments.
+# Currently recognized:
+#   SKIP_HOME=0|1   (default: 1 — skip auto-attach at $HOME)
+GTA_CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/ghostty-tmux-attach/config"
+if [ -r "$GTA_CONFIG_FILE" ]; then
+  # Strip comments + blank lines, then source as KEY=VALUE pairs.
+  while IFS='=' read -r _gta_k _gta_v; do
+    case "$_gta_k" in
+      ''|'#'*) continue ;;
+      SKIP_HOME)
+        # Only set if not already overridden by env (env wins so test hooks work)
+        : "${GHOSTTY_TMUX_ATTACH_SKIP_HOME:=$_gta_v}"
+        ;;
+    esac
+  done < <(grep -v '^[[:space:]]*#' "$GTA_CONFIG_FILE" 2>/dev/null | grep '=')
+  export GHOSTTY_TMUX_ATTACH_SKIP_HOME
+  gta_log "loaded config from $GTA_CONFIG_FILE (SKIP_HOME=${GHOSTTY_TMUX_ATTACH_SKIP_HOME:-1})"
+fi
+
 # --- Guards ---
 # Test hook: tests can't easily allocate a PTY under bats, so they set
 # GHOSTTY_TMUX_ATTACH_TEST_SKIP_TTY_GUARD=1 to skip ONLY this guard. Production
