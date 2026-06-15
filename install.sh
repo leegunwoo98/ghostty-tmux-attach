@@ -155,11 +155,18 @@ cmd_init() {
 
   # Resolve install paths.
   # Test/override hook: GTA_INSTALL_PREFIX wins if set.
-  # Otherwise: prefer $HOMEBREW_PREFIX if its bin/ is writable; else ~/.local.
+  # Default: $HOME/.local. The /opt/homebrew prefix is reserved for the
+  # case where brew already installed our formula's binaries there (probe
+  # for the launcher's existence). Writing into /opt/homebrew without
+  # brew's blessing causes catastrophic data loss: any future `brew install`
+  # of our formula (even a failed one) will roll back and wipe the path,
+  # including files we wrote. Hard-learned bug.
   local install_prefix
   if [ -n "${GTA_INSTALL_PREFIX:-}" ]; then
     install_prefix="$GTA_INSTALL_PREFIX"
-  elif [ -n "$GTA_HOMEBREW_PREFIX" ] && [ -w "$GTA_HOMEBREW_PREFIX/bin" ]; then
+  elif [ -n "$GTA_HOMEBREW_PREFIX" ] && \
+       [ -x "$GTA_HOMEBREW_PREFIX/libexec/ghostty-tmux-attach/ghostty-tmux-attach-launch" ]; then
+    # brew already installed the binaries; just point at them + patch configs.
     install_prefix="$GTA_HOMEBREW_PREFIX"
   else
     install_prefix="$HOME/.local"
