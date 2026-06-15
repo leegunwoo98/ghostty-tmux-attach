@@ -1,5 +1,13 @@
 # ghostty-tmux-attach
 
+> ⚠️ **Archived 2026-06-15.** This project is no longer maintained.
+>
+> After a week of dogfooding, the architecture proved structurally too fragile: making per-cwd tmux session inheritance work through Ghostty's `window-save-state` requires a five-layer chain (launcher → tmux `default-command` → shell-wrapper → ZDOTDIR shim → DCS-passthrough OSC 7) that must align perfectly, and continuum-restored panes bypass the chain entirely. The cwd-inheritance edge cases were not fully tractable at the shell-escape-sequence layer. See [CHANGELOG.md](./CHANGELOG.md) for the post-mortem.
+>
+> The intended successor is a **libghostty-based session manager** (e.g. a fork of [zmx](https://github.com/neurosnap/zmx)) — that approach talks to Ghostty's own session API instead of fighting tmux's OSC 7 interception, which eliminates the entire fragility class.
+>
+> This repo is preserved as a reference: race-free POSIX allocator (`lib/allocator.sh`), sentinel-versioned config patching (`lib/patches.sh`), and a bats-core test harness that proved useful.
+
 Make Ghostty's `window-save-state = always` restore actually re-attach to tmux sessions instead of dropping you at a plain `$HOME` shell.
 
 [![CI](https://github.com/leegunwoo98/ghostty-tmux-attach/actions/workflows/ci.yml/badge.svg)](https://github.com/leegunwoo98/ghostty-tmux-attach/actions/workflows/ci.yml)
