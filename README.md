@@ -2,7 +2,7 @@
 
 Make Ghostty's `window-save-state = always` restore actually re-attach to tmux sessions instead of dropping you at a plain `$HOME` shell.
 
-[![CI](https://github.com/gunwoo/ghostty-tmux-attach/actions/workflows/ci.yml/badge.svg)](https://github.com/gunwoo/ghostty-tmux-attach/actions/workflows/ci.yml)
+[![CI](https://github.com/leegunwoo98/ghostty-tmux-attach/actions/workflows/ci.yml/badge.svg)](https://github.com/leegunwoo98/ghostty-tmux-attach/actions/workflows/ci.yml)
 
 ## What it does
 
@@ -21,7 +21,7 @@ This package solves all three with a launcher binary wired into Ghostty's `comma
 ### curl-pipe (recommended)
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/gunwoo/ghostty-tmux-attach/main/install.sh | bash -s -- init
+curl -fsSL https://raw.githubusercontent.com/leegunwoo98/ghostty-tmux-attach/main/install.sh | bash -s -- init
 ```
 
 Idempotent. Re-run safely.
@@ -29,8 +29,8 @@ Idempotent. Re-run safely.
 ### Homebrew
 
 ```sh
-brew tap gunwoo/tap
-brew install gunwoo/tap/ghostty-tmux-attach
+brew tap leegunwoo98/tap
+brew install leegunwoo98/tap/ghostty-tmux-attach
 ghostty-tmux-attach init
 ```
 

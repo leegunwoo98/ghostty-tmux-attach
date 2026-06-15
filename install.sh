@@ -27,7 +27,7 @@ Commands:
   --version            Print version and exit.
   --help               Show this help.
 
-See https://github.com/gunwoo/ghostty-tmux-attach for docs.
+See https://github.com/leegunwoo98/ghostty-tmux-attach for docs.
 USAGE
 }
 

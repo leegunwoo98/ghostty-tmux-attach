@@ -23,7 +23,7 @@ jobs:
         uses: dawidd6/action-homebrew-bump-formula@v3
         with:
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          tap: gunwoo/homebrew-tap
+          tap: leegunwoo98/homebrew-tap
           formula: ghostty-tmux-attach
           tag: ${{ github.ref_name }}
           force: false

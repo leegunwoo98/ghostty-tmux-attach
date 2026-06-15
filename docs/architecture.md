@@ -620,7 +620,7 @@ Every release to `ghostty-tmux-attach` requires a corresponding formula update i
 2. GitHub Actions release workflow:
    - Builds tarball from the tag.
    - Computes sha256.
-   - Opens a PR in `gunwoo/homebrew-tap` updating `Formula/ghostty-tmux-attach.rb` with new url + sha256 (using `brew bump-formula-pr --no-browse --strict`).
+   - Opens a PR in `leegunwoo98/homebrew-tap` updating `Formula/ghostty-tmux-attach.rb` with new url + sha256 (using `brew bump-formula-pr --no-browse --strict`).
 3. `homebrew-tap` CI:
    - Runs `brew install --build-from-source` on `macos-15` and `ubuntu-24.04`.
    - Runs `brew test ghostty-tmux-attach`.
