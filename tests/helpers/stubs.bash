@@ -26,6 +26,7 @@ EOSTUB
 }
 
 stub_tmux_no_sessions() {
+  # shellcheck disable=SC2016  # $1 is intentionally literal — expanded inside the stub
   stub_install tmux '
     case "$1" in
       has-session) exit 1 ;;
@@ -37,6 +38,7 @@ stub_tmux_no_sessions() {
 }
 
 stub_tmux_session_exists_with_clients() {
+  # shellcheck disable=SC2016  # $1 is intentionally literal — expanded inside the stub
   stub_install tmux '
     case "$1" in
       has-session) exit 0 ;;

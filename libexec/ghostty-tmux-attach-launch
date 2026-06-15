@@ -147,7 +147,10 @@ export GHOSTTY_USER_SHELL="$GTA_USER_SHELL"
 exec 9>&- 2>/dev/null || true
 
 # --- exec tmux, with shell-fallback if exec itself fails ---
+# (shellcheck SC2093: the second `exec` is intentionally reachable — only
+# runs if `exec tmux` itself fails, e.g., broken tmux binary or signal.)
 gta_log "exec tmux new-session -A -s $GTA_CHOSEN"
+# shellcheck disable=SC2093
 exec tmux new-session -A -s "$GTA_CHOSEN"
 gta_log "ERROR: exec tmux returned; falling back to shell"
 exec "$GTA_USER_SHELL" -l

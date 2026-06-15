@@ -84,14 +84,13 @@ cmd_init() {
   # unless --force was passed.
   if [ "$update" -eq 1 ] && [ "$force" -eq 0 ]; then
     local files=("ghostty:$HOME/.config/ghostty/config" "tmux-main:$HOME/.tmux.conf")
-    local entry snippet_id file found ver hash body body_hash
+    local entry file found hash body body_hash
     for entry in "${files[@]}"; do
-      snippet_id="${entry%%:*}"
       file="${entry#*:}"
       [ -e "$file" ] || continue
       found=$(gta_patch_version_hash "$file")
       [ -n "$found" ] || continue
-      ver="${found%% *}"
+      # found is "VERSION HASH"; we only need HASH for comparison.
       hash="${found##* }"
       body=$(gta_patch_read "$file")
       body_hash=$(gta_patch_hash "$body")
@@ -285,6 +284,9 @@ cmd_uninstall() {
     local snap_root="$HOME/.local/share/ghostty-tmux-attach/snapshots"
     local latest=""
     if [ -d "$snap_root" ]; then
+      # Snapshot dir names are sortable timestamps (YYYYMMDDTHHMMSSZ); ls is
+      # safe and clearer than find here.
+      # shellcheck disable=SC2012
       latest=$(ls -1 "$snap_root" 2>/dev/null | sort | tail -1)
     fi
     if [ -z "$latest" ]; then
