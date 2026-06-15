@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] — 2026-06-15
+
+### Fixed
+- **zsh shim's tmux-DCS OSC 7 wrap was clobbered by user `.zshrc` re-sourcing Ghostty integration.** Legacy/manual setups where users have `if [[ -n "$TMUX" ]]; then source ".../ghostty-integration"; fi` in their `.zshrc` re-registered the plain `_ghostty_report_pwd` AFTER the shim's override, defeating the wrap. Visible symptom: new Ghostty panes inherit the launch-time cwd instead of the current cwd, and attach to a "previous" session matching the original launch dir. Fix: shim now uses `add-zsh-hook chpwd/precmd _gta_tmux_osc7` for a SEPARATE function that survives re-sources. Regression test added.
+
 ## [0.1.2] — 2026-06-15
 
 ### Fixed
