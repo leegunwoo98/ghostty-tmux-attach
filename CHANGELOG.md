@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] — 2026-06-15
+
+### Fixed
+- **Catastrophic data loss when installing alongside brew.** `install.sh` defaulted to `/opt/homebrew` as the install prefix whenever brew was present and the bin dir was writable. brew owns that path. Any subsequent `brew install` of this formula (even a *failed* one — e.g., the Xcode CLI Tools transition error) triggers brew's rollback, which wipes the entire install dir, including files written by `install.sh`. End-user symptom: Ghostty fails to launch after Cmd+Q reopen with `cannot execute: No such file or directory`. Fix: install prefix defaults to `$HOME/.local`; `/opt/homebrew` is only used when brew has already installed the formula's binaries there (probed via `-x` on the expected launcher path).
+
 ## [0.1.1] — 2026-06-15
 
 ### Fixed
