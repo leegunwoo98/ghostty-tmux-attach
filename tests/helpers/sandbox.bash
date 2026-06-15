@@ -3,11 +3,16 @@
 
 sandbox_setup() {
   SANDBOX_HOME=$(mktemp -d)
+  SANDBOX_CONFIG="$SANDBOX_HOME/.config"
   SANDBOX_CACHE="$SANDBOX_HOME/.cache"
   SANDBOX_STATE="$SANDBOX_HOME/.local/state"
   SANDBOX_DATA="$SANDBOX_HOME/.local/share"
-  mkdir -p "$SANDBOX_HOME/.config" "$SANDBOX_CACHE" "$SANDBOX_STATE" "$SANDBOX_DATA"
+  mkdir -p "$SANDBOX_CONFIG" "$SANDBOX_CACHE" "$SANDBOX_STATE" "$SANDBOX_DATA"
   export HOME="$SANDBOX_HOME"
+  # XDG_CONFIG_HOME must be sandboxed too — CI runners (Ubuntu) set it
+  # system-wide, so without this override the launcher's config-file probe
+  # would look outside the sandbox.
+  export XDG_CONFIG_HOME="$SANDBOX_CONFIG"
   export XDG_CACHE_HOME="$SANDBOX_CACHE"
   export XDG_STATE_HOME="$SANDBOX_STATE"
   export XDG_DATA_HOME="$SANDBOX_DATA"
@@ -23,8 +28,8 @@ sandbox_teardown() {
       *) echo "REFUSING to clean unsafe sandbox path: $SANDBOX_HOME" >&2 ;;
     esac
   fi
-  unset SANDBOX_HOME SANDBOX_CACHE SANDBOX_STATE SANDBOX_DATA
-  unset XDG_CACHE_HOME XDG_STATE_HOME XDG_DATA_HOME
+  unset SANDBOX_HOME SANDBOX_CONFIG SANDBOX_CACHE SANDBOX_STATE SANDBOX_DATA
+  unset XDG_CONFIG_HOME XDG_CACHE_HOME XDG_STATE_HOME XDG_DATA_HOME
   unset GTA_INSTALL_PREFIX
 }
 
