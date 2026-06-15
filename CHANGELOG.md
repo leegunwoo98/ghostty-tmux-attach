@@ -4,7 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.0] — TBD
+## [0.1.1] — 2026-06-15
+
+### Fixed
+- **Installer never copied `bin/ghostty-tmux-attach`** to the install dir. After v0.1.0 install, the CLI dispatcher was missing — `ghostty-tmux-attach doctor` would print `command not found`. Discovered via dogfooding.
+- **Launcher + shell-wrapper shebangs** (`#!/usr/bin/env bash`) resolved to system bash 3.2 under Ghostty's `command =` exec context, because launchd's PATH is `/usr/bin:/bin`. The launcher's `printf -v` urlencode requires bash 4+. Fix: install-time shebang rewrite to the absolute path of the bash that ran install.sh.
+
+## [0.1.0] — 2026-06-15
 
 ### Added
 - **Launcher binary** (`libexec/ghostty-tmux-attach-launch`) as Ghostty `command =` target. Handles guards (TTY, TMUX, SSH, PWD!=HOME, tmux on PATH), OSC 7 emit with bash-4+ urlencode, allocator integration, fd-hygiene before exec.
