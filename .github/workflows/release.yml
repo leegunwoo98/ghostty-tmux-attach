@@ -21,6 +21,11 @@ jobs:
 
       - name: Bump formula in homebrew-tap
         uses: dawidd6/action-homebrew-bump-formula@v3
+        env:
+          # Homebrew's "untrusted tap" guard rejects personal taps by default
+          # since the 5.0/5.1 transition. CI runner is ephemeral so bypassing
+          # trust for this single workflow run is safe.
+          HOMEBREW_NO_REQUIRE_TAP_TRUST: 1
         with:
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           tap: leegunwoo98/homebrew-tap
