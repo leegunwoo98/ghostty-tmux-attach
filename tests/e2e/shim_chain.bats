@@ -168,3 +168,32 @@ teardown() {
   printf '%s' "$output" | od -An -c | tr -d '\n' | grep -E '(033|esc)[[:space:]]+P[[:space:]]+t[[:space:]]+m[[:space:]]+u[[:space:]]+x[[:space:]]+;' >/dev/null || \
     { printf '%s' "$output" | od -c | head -20; fail "no tmux DCS passthrough prefix found in bash shim output"; }
 }
+
+@test "zsh shim's tmux wrap survives user .zshrc re-sourcing Ghostty integration (regression: v0.1.2 dogfood bug)" {
+  if ! command -v zsh >/dev/null 2>&1; then
+    skip "zsh not installed"
+  fi
+  # User's .zshrc contains a legacy/manual block that re-sources Ghostty
+  # integration inside tmux. Before this fix, that re-source clobbered our
+  # _ghostty_report_pwd override → plain OSC 7 → tmux intercepted → new
+  # Ghostty surfaces inherited launch-time cwd instead of current cwd.
+  cat > "$USER_ZDOTDIR/.zshrc" <<'USERRC'
+echo "USER_ZSHRC_SOURCED"
+# Legacy manual inside-tmux source — used to clobber our wrap.
+if [[ -n "$TMUX" && -n "$GHOSTTY_RESOURCES_DIR" ]]; then
+  builtin source "$GHOSTTY_RESOURCES_DIR/shell-integration/zsh/ghostty-integration"
+fi
+USERRC
+
+  output=$(env -i HOME="$HOME" PATH="$PATH" TERM=xterm \
+    ZDOTDIR="$REPO_ROOT/shim/zsh" \
+    GHOSTTY_USER_ZDOTDIR="$USER_ZDOTDIR" \
+    GHOSTTY_RESOURCES_DIR="$FAKE_GHOSTTY" \
+    TMUX="/tmp/fake-tmux,1234,0" \
+    HOST=testhost \
+    zsh -i -c 'cd /tmp; exit' 2>&1 || true)
+
+  printf '%s' "$output" | od -An -c | tr -d '\n' | \
+    grep -E '(033|esc)[[:space:]]+P[[:space:]]+t[[:space:]]+m[[:space:]]+u[[:space:]]+x[[:space:]]+;' >/dev/null || \
+    { printf '%s' "$output" | od -c | head -20; fail "DCS wrap missing after user re-source — clobber regressed"; }
+}

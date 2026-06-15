@@ -10,17 +10,11 @@ if [[ -n "${GHOSTTY_RESOURCES_DIR:-}" ]]; then
   unset _gta_int
 fi
 
-# Inside tmux, override Ghostty's OSC 7 emitter to wrap in tmux DCS
-# passthrough so the cwd reaches the outer Ghostty terminal. Without this,
-# new Ghostty panes/tabs inherit the OUTER shell's launch-time cwd (stale
-# once the user cd's inside tmux), and they open at the wrong directory.
-if [[ -n "${TMUX:-}" ]]; then
-  _ghostty_report_pwd() {
-    builtin print -n -- $'\ePtmux;\e\e]7;kitty-shell-cwd://'"${HOST}${PWD}"$'\a\e\\'
-  }
-fi
-
-# Restore the user's original ZDOTDIR and chain to their .zshrc
+# Restore the user's original ZDOTDIR and chain to their .zshrc FIRST.
+# We hook the OSC 7 wrap AFTER the user's rc so even if their rc re-sources
+# Ghostty's integration (legacy/manual setups), our hook still fires on every
+# precmd/chpwd via add-zsh-hook (the user's re-source merely appends another
+# plain emitter — our DCS-wrapped emitter still runs and reaches Ghostty).
 if [[ -n "${GHOSTTY_USER_ZDOTDIR:-}" ]]; then
   ZDOTDIR="$GHOSTTY_USER_ZDOTDIR"
   unset GHOSTTY_USER_ZDOTDIR
@@ -31,4 +25,19 @@ export ZDOTDIR
 
 if [[ -r "$ZDOTDIR/.zshrc" ]]; then
   builtin source "$ZDOTDIR/.zshrc"
+fi
+
+# Inside tmux, add a DCS-passthrough OSC 7 emitter so cwd updates reach the
+# outer Ghostty terminal. Runs ALONGSIDE Ghostty's own plain OSC 7 emit
+# (which tmux intercepts harmlessly) via separate chpwd/precmd hooks.
+# Robust against user .zshrc re-sourcing Ghostty integration: re-sources
+# append to the hook arrays without removing our function.
+if [[ -n "${TMUX:-}" ]]; then
+  _gta_tmux_osc7() {
+    builtin print -n -- $'\ePtmux;\e\e]7;kitty-shell-cwd://'"${HOST}${PWD}"$'\a\e\\'
+  }
+  autoload -Uz add-zsh-hook
+  add-zsh-hook chpwd _gta_tmux_osc7
+  add-zsh-hook precmd _gta_tmux_osc7
+  _gta_tmux_osc7   # fire once immediately so the wrap reaches Ghostty pre-first-prompt
 fi
